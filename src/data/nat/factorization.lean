@@ -58,6 +58,14 @@ by simp [factorization, add_equiv.map_eq_zero_iff, multiset.coe_eq_zero]
 by { ext p, simp only [add_apply, factorization_eq_count,
   count_factors_mul_of_pos (zero_lt_iff.mpr ha) (zero_lt_iff.mpr hb)] }
 
+lemma factorization_mul_of_coprime {a b : ℕ} (hab : coprime a b) :
+  (a * b).factorization = a.factorization + b.factorization :=
+begin
+  ext q,
+  simp only [finsupp.coe_add, pi.add_apply, factorization_eq_count],
+  simp only [count_factors_mul_of_coprime hab],
+end
+
 /-- For any `p`, the power of `p` in `n^k` is `k` times the power in `n` -/
 lemma factorization_pow {n k : ℕ} :
   factorization (n^k) = k • n.factorization :=
@@ -83,5 +91,60 @@ end
 @[simp] lemma prime.factorization_pow {p k : ℕ} (hp : prime p) :
   factorization (p^k) = single p k :=
 by simp [factorization_pow, prime.factorization hp]
+
+-- TODO: Move this to `data/finsupp/basic`
+/-- For disjoint `f1` and `f2`, and function `g`
+ the product of `g x (f1 x + f2 x))` over `f1.support` equals the product of `g` over `f1.support` -/
+lemma disjoint_prod_add_aux {f1 f2 : α →₀ M} (hd : disjoint f1.support f2.support)
+  {β : Type*} [comm_monoid β] {g : α → M → β} :
+(∏ (x : α) in f1.support, g x (f1 x + f2 x)) = f1.prod g :=
+begin
+  unfold finsupp.prod,
+  rw prod_congr rfl,
+  intros x hx,
+  simp only [not_mem_support_iff.mp (finset.disjoint_left.mp hd hx), add_zero],
+end
+
+lemma disjoint_prod_add {f1 f2 : α →₀ M} (hd : disjoint f1.support f2.support)
+  {β : Type*} [comm_monoid β] {g : α → M → β} :
+  f1.prod g * f2.prod g = (f1 + f2).prod g :=
+begin
+  rw [←disjoint_prod_add_aux hd, ←disjoint_prod_add_aux (disjoint.comm.mp hd)],
+  simp only [add_comm, finsupp.prod, support_add_eq hd, prod_union hd, add_apply],
+end
+
+/-- For any multiplicative function `f` with `f 1 = 1` and any `n > 0`,
+we can evaluate `f n` by evaluating `f` at `p ^ k` over the factorization of `n` -/
+lemma multiplicative_factorization {n : ℕ} {β : Type*} [comm_monoid β] {f : ℕ → β}
+  (hn : 0 < n)
+  (h_mult : ∀ x y : ℕ, coprime x y → f(x * y) = f x * f y)
+  (hf : f 1 = 1) :
+f n = n.factorization.prod (λ p k, f(p ^ k)) :=
+begin
+  apply @nat.rec_on_pos_prime_coprime
+    (λ n, (0 < n) → (f n = n.factorization.prod (λ p k, f(p ^ k)))),
+
+  -- Case for positive prime power p^k
+  { intros p k hp hk hpk,
+    rw prime.factorization_pow hp,
+    rw finsupp.prod_single_index _,
+    simpa using hf },
+
+  -- Case for 0, trivially
+  { simp },
+
+  -- Case for 1
+  { rintros -, rw [factorization_one, hf], simp },
+
+  -- Case for coprime a and b
+  { intros a b hab ha hb hab_pos,
+    rw h_mult a b hab,
+    rw ha (pos_of_mul_pos_right hab_pos (b.zero_le)),
+    rw hb (pos_of_mul_pos_left hab_pos (a.zero_le)),
+    rw factorization_mul_of_coprime hab,
+    apply disjoint_prod_add (factorization_disjoint_of_coprime hab) },
+
+  exact hn,
+end
 
 end nat
